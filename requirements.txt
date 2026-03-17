@@ -1,2 +1,6 @@
 streamlit
-requests
+torch
+diffusers
+transformers
+accelerate
+safetensors
