@@ -1,74 +1,78 @@
 import streamlit as st
 import google.generativeai as genai
 
-# --- 1. CONFIG ---
-st.set_page_config(page_title="AI Studio v2.5", page_icon="🎨")
+# --- 1. KONFIGURASI HALAMAN ---
+st.set_page_config(page_title="AI Studio v2.5 (ID)", page_icon="🎨")
 
-# --- 2. SETUP API ---
+# --- 2. KONFIGURASI API ---
 try:
-    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    # Gunakan Gemini 2.5 Flash
-    model = genai.GenerativeModel("gemini-2.5-flash")
+    api_key = st.secrets["GEMINI_API_KEY"]
+    genai.configure(api_key=api_key)
+    # Gunakan Gemini 2.5 Pro atau Flash yang stabil
+    model = genai.GenerativeModel('gemini-2.5-flash')
 except Exception as e:
     st.error(f"Setup Gagal: {e}")
     st.stop()
 
 # --- 3. SESSION STATE ---
-if "history" not in st.session_state:
-    st.session_state.history = []
+if "image_history" not in st.session_state:
+    st.session_state.image_history = []
 
-# --- 4. TAMPILAN ---
+# --- 4. UI ---
 st.title("🎨 AI Image Studio v2.5")
-st.caption("Fokus: Pembuatan Gambar Otomatis")
+st.markdown("Buat gambar dengan deskripsi penuh dari imajinasimu.")
 
-for msg in st.session_state.history:
-    with st.chat_message(msg["role"]):
-        if msg["type"] == "text":
-            st.markdown(msg["content"])
+# Tampilkan history
+for chat in st.session_state.image_history:
+    with st.chat_message(chat["role"]):
+        if chat["type"] == "text":
+            st.write(chat["content"])
         else:
-            st.image(msg["content"], use_container_width=True)
+            st.image(chat["content"], use_container_width=True)
 
-# --- 5. LOGIKA ---
-if prompt := st.chat_input("Ketik deskripsi gambar..."):
-    st.session_state.history.append({"role": "user", "type": "text", "content": prompt})
+# --- 5. LOGIKA GENERATE ---
+if prompt := st.chat_input("Deskripsikan gambar Anda dalam Bahasa Indonesia..."):
+    # Tampilkan prompt user
+    st.session_state.image_history.append({"role": "user", "type": "text", "content": prompt})
     with st.chat_message("user"):
         st.write(prompt)
 
     with st.chat_message("assistant"):
         with st.spinner("Sedang melukis..."):
             try:
-                # SETTING SAFETY FILTER KE PALING RENDAH AGAR TIDAK BLOCKED
-                safety_settings = [
+                # KONFIGURASI KEAMANAN: SET KE BLOCK_NONE AGAR LEBIH BEBAS
+                safety_settings=[
                     {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
                     {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
                     {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
                     {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
                 ]
 
-                # Meminta gambar
+                # MEMINTA GAMBAR DENGAN FILTER KEAMANAN TERENDAH
                 response = model.generate_content(
-                    f"Generate a high quality image of: {prompt}",
+                    f"Generate a very high-quality image based on this specific description: {prompt}",
                     safety_settings=safety_settings
                 )
-                
+
                 # Cek apakah ada data gambar
                 has_image = False
                 if response.candidates[0].content.parts:
                     for part in response.candidates[0].content.parts:
                         if hasattr(part, 'inline_data'):
+                            # Menampilkan gambar langsung di Streamlit
                             img_data = part.inline_data.data
-                            st.image(img_data, use_container_width=True)
-                            st.session_state.history.append({"role": "assistant", "type": "image", "content": img_data})
+                            st.image(img_data, use_container_width=True, caption="Hasil Kreasi AI")
+                            st.session_state.image_history.append({"role": "assistant", "type": "image", "content": img_data})
                             has_image = True
                             break
-                
+
                 if not has_image:
-                    # Jika kena filter atau hanya teks
-                    text_resp = response.text if response.parts else "Maaf, permintaan ini diblokir oleh filter keamanan Google."
-                    st.warning(text_resp)
-                    st.session_state.history.append({"role": "assistant", "type": "text", "content": text_resp})
+                    # Jika AI memberikan respon teks, tampilkan
+                    st.write(response.text)
+                    st.info("💡 Kadang AI memberikan respon teks. Cobalah deskripsi yang lebih panjang.")
+                    st.session_state.image_history.append({"role": "assistant", "type": "text", "content": response.text})
 
             except Exception as e:
-                # Tangani jika finish_reason atau error lainnya muncul
-                st.error("Gagal memproses: Coba ganti deskripsi kalimat Anda.")
-                st.info("Tips: Gunakan Bahasa Inggris jika Bahasa Indonesia tidak membuahkan hasil.")
+                # Tangani error dengan elegan tanpa menyarankan bahasa Inggris
+                st.error("Gagal memproses gambar: Coba ubah deskripsi Anda.")
+                st.info("Tips: Berikan instruksi yang lebih detail agar AI lebih mudah memahami konteksnya.")
